@@ -1,0 +1,15 @@
+node_modules
+dist
+.git
+.github
+tests
+coverage
+.env
+.env.local
+*.log
+npm-debug.log*
+.DS_Store
+.gemini
+Auction_Bidding_Service.postman_collection.json
+README.md
+
