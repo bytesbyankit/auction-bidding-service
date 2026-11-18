@@ -1,0 +1,282 @@
+{
+  "info": {
+    "_postman_id": "a8f3b21c-4d5e-49b1-9a72-8f1234567890",
+    "name": "Auction Bidding Service API",
+    "description": "Comprehensive Postman collection for testing the Auction Bidding Service: health check, atomic bidding, real-time RethinkDB changefeed SSE streaming, auction creation, and paginated bid history.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "auctionId",
+      "value": "auc-active-1",
+      "type": "string"
+    },
+    {
+      "key": "userId",
+      "value": "user-postman-1",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "System & Health",
+      "item": [
+        {
+          "name": "1. Health & Database Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            },
+            "description": "Checks the health status of the API instance and its connection to RethinkDB."
+          },
+          "response": []
+        },
+        {
+          "name": "2. Get OpenAPI 3.0 Specification JSON",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/openapi.json",
+              "host": ["{{baseUrl}}"],
+              "path": ["openapi.json"]
+            },
+            "description": "Retrieves the complete OpenAPI 3.0 specification definition in JSON format."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Auctions",
+      "item": [
+        {
+          "name": "1. Create New Auction",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.status === 'SUCCESS' && res.data && res.data.id) {",
+                  "    pm.collectionVariables.set('auctionId', res.data.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"1954 Fender Stratocaster Original Sunburst\",\n  \"starting_price\": 12000.00,\n  \"ends_at\": \"2026-12-31T23:59:59.000Z\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auctions",
+              "host": ["{{baseUrl}}"],
+              "path": ["auctions"]
+            },
+            "description": "Creates a new active auction with starting price and expiration timestamp."
+          },
+          "response": []
+        },
+        {
+          "name": "2. Get Auction Details with Bid History",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auctions/{{auctionId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["auctions", "{{auctionId}}"]
+            },
+            "description": "Retrieves the auction status, current top bid, and all recorded bids."
+          },
+          "response": []
+        },
+        {
+          "name": "3. Get Auction with Paginated Bids",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auctions/{{auctionId}}?limit=5&offset=0",
+              "host": ["{{baseUrl}}"],
+              "path": ["auctions", "{{auctionId}}"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "5",
+                  "description": "Number of bids per page (max 100)"
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Offset to skip"
+                }
+              ]
+            },
+            "description": "Queries the auction with paginated bid history and total count metadata."
+          },
+          "response": []
+        },
+        {
+          "name": "4. Live Real-time Changefeed Stream (SSE)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "text/event-stream"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auctions/{{auctionId}}/stream",
+              "host": ["{{baseUrl}}"],
+              "path": ["auctions", "{{auctionId}}", "stream"]
+            },
+            "description": "Establishes a persistent Server-Sent Events stream powered by RethinkDB changefeeds. Pushes INITIAL_STATE immediately, followed by BID_UPDATE whenever any client places an accepted bid."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Bidding",
+      "item": [
+        {
+          "name": "1. Place Valid Higher Bid (Accepted - 201)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"auction_id\": \"{{auctionId}}\",\n  \"user_id\": \"{{userId}}\",\n  \"amount\": 5500.00\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/bid",
+              "host": ["{{baseUrl}}"],
+              "path": ["bid"]
+            },
+            "description": "Atomically places a bid strictly higher than the current top bid. Resolves race conditions via RethinkDB atomic CAS."
+          },
+          "response": []
+        },
+        {
+          "name": "2. Place Idempotent Duplicate Bid (Retry - 200)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"auction_id\": \"{{auctionId}}\",\n  \"user_id\": \"{{userId}}\",\n  \"amount\": 5500.00\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/bid",
+              "host": ["{{baseUrl}}"],
+              "path": ["bid"]
+            },
+            "description": "Simulates an idempotent network retry from the same top bidder with the exact same amount. Returns 200 OK without incrementing the bid count."
+          },
+          "response": []
+        },
+        {
+          "name": "3. Place Lower / Outbid Amount (Rejected - 409)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"auction_id\": \"{{auctionId}}\",\n  \"user_id\": \"competitor-user\",\n  \"amount\": 5000.00\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/bid",
+              "host": ["{{baseUrl}}"],
+              "path": ["bid"]
+            },
+            "description": "Tests rejection when the submitted amount is lower than or equal to current top bid."
+          },
+          "response": []
+        },
+        {
+          "name": "4. Place Bid on Expired Auction (Rejected - 409)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"auction_id\": \"auc-closed-1\",\n  \"user_id\": \"late-bidder\",\n  \"amount\": 9999.00\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/bid",
+              "host": ["{{baseUrl}}"],
+              "path": ["bid"]
+            },
+            "description": "Tests rejection when attempting to bid on an auction whose ends_at timestamp has passed."
+          },
+          "response": []
+        },
+        {
+          "name": "5. Place Bid with Invalid Payload (Validation Error - 400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"auction_id\": \"\",\n  \"user_id\": \"user-1\",\n  \"amount\": -50.12345\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/bid",
+              "host": ["{{baseUrl}}"],
+              "path": ["bid"]
+            },
+            "description": "Tests input validation failure for negative amount, extra decimal places, and empty auction_id."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
+
